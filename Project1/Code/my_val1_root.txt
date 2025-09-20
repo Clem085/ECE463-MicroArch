@@ -4,8 +4,8 @@ L1_SIZE:    1024
 L1_ASSOC:   1
 L2_SIZE:    0
 L2_ASSOC:   0
-PREF_N:     1
-PREF_M:     4
+PREF_N:     0
+PREF_M:     0
 trace_file: gcc_trace.txt
 
 ===== L1 contents =====
