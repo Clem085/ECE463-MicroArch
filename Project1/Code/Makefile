@@ -22,6 +22,46 @@ $(SRC_DIR)/%.o: $(SRC_DIR)/%.cc
 clean:
 	rm -f $(OBJS) $(BIN)
 
+
+
+.PHONY: run val1 val2 val3 val4 # val5 val6 val7 val8 allvals
+
+run:
+	./sim 32 8192 4 0 0 0 0 traces/example_trace.txt
+
+val1:
+	./sim 16 1024 1 0 0 0 0 traces/gcc_trace.txt > my_val1.txt
+	diff -iw my_val1.txt val-proj1/val1.16_1024_1_0_0_0_0_gcc.txt
+
+val2:
+	./sim 32 1024 2 0 0 0 0 traces/gcc_trace.txt > my_val2.txt
+	diff -iw my_val2.txt val-proj1/val2.32_1024_2_0_0_0_0_gcc.txt
+
+val3:
+	./sim 16 1024 1 8192 4 0 0 traces/gcc_trace.txt > my_val3.txt
+	diff -iw my_val3.txt val-proj1/val3.16_1024_1_8192_4_0_0_gcc.txt
+
+val4:
+	./sim 32 1024 2 6144 3 0 0 traces/gcc_trace.txt > my_val4.txt
+	diff -iw my_val4.txt val-proj1/val4.32_1024_2_6144_3_0_0_gcc.txt
+
+# val5:
+# 	./sim 16 1024 1 0 0 1 4 traces/gcc_trace.txt > my_val5.txt
+# 	diff -iw my_val5.txt val-proj1/val5.16_1024_1_0_0_1_4_gcc.txt
+
+# val6:
+# 	./sim 32 1024 2 0 0 3 1 traces/gcc_trace.txt > my_val6.txt
+# 	diff -iw my_val6.txt val-proj1/val6.32_1024_2_0_0_3_1_gcc.txt
+
+# val7:
+# 	./sim 16 1024 1 8192 4 3 4 traces/gcc_trace.txt > my_val7.txt
+# 	diff -iw my_val7.txt val-proj1/val7.16_1024_1_8192_4_3_4_gcc.txt
+
+# val8:
+# 	./sim 32 1024 2 12288 6 7 6 traces/gcc_trace.txt > my_val8.txt
+# 	diff -iw my_val8.txt val-proj1/val8.32_1024_2_12288_6_7_6_gcc.txt
+
+allvals: val1 val2 val3 val4 # val5 val6 val7 val8
 # ////// MODIFIED MAKE FILE ////// #
 
 
