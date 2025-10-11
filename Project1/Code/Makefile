@@ -1,5 +1,3 @@
-# Root-style Makefile (works like Gradescope)
-# Builds ./sim from all .cc files in the current directory.
 
 CXX       := g++
 CXXFLAGS  := -std=c++17 -O3 -Wall -Wextra
@@ -10,7 +8,7 @@ SOURCES   := $(wildcard *.cc)
 OBJECTS   := $(SOURCES:.cc=.o)
 TARGET    := sim
 
-# traces we’ll “stage” to the current directory for Gradescope-like runs
+
 TRACES_SRC := traces
 TRACE_FILES := gcc_trace.txt go_trace.txt perl_trace.txt compress_trace.txt vortex_trace.txt
 
@@ -27,15 +25,11 @@ $(TARGET): $(OBJECTS)
 clean:
 	rm -f $(OBJECTS) $(TARGET) my_val*.txt
 
-# --- Make local behave like Gradescope ---
-# Gradescope places trace files at the submission root.
-# 'stage' copies them from ./traces/ into the current directory.
+# LOCAL:: INFO SET-UP
 stage:
 	@for f in $(TRACE_FILES); do \
 		if [ -f "$(TRACES_SRC)/$$f" ]; then cp -f "$(TRACES_SRC)/$$f" .; fi; \
 	done
-
-# Convenience targets; depend on sim and stage so they run like the grader
 run: stage $(TARGET)
 	./$(TARGET) 32 8192 4 0 0 0 0 gcc_trace.txt
 

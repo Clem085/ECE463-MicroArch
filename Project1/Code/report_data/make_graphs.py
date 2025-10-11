@@ -211,21 +211,36 @@ def grid_graph5(config, sim_path, arg_order, cacti, trace):
             results.append(rec)
     return pd.DataFrame(results)
 
+def _format_ticks(ax, values, suffix):
+    ticks = sorted(v for v in values if v and v > 0)
+    ax.set_xticks(ticks)
+    labels = []
+    for v in ticks:
+        if suffix == "KB":
+            labels.append(f"{int(v)}KB" if float(v).is_integer() else f"{v:.2f}KB")
+        else:
+            labels.append(f"{int(v)}B")
+    ax.set_xticklabels(labels)
+
+
 def plot_graph1(df, outdir):
     df = df.copy()
-    df["log2_L1_SIZE"] = df["L1_SIZE"].apply(lambda x: math.log2(x) if x and x > 0 else None)
+    df["L1_SIZE_KB"] = df["L1_SIZE"].apply(lambda x: (x / 1024) if x and x > 0 else None)
     def label_assoc(row):
         return "FA" if row["L1_ASSOC"] == (row["L1_SIZE"] / row["BLOCKSIZE"]) else int(row["L1_ASSOC"])
     df["assoc_label"] = df.apply(label_assoc, axis=1)
-    plt.figure()
+    plt.figure(figsize=(8, 5))
     for label, g in df.groupby("assoc_label"):
-        g = g.sort_values("log2_L1_SIZE")
-        plt.plot(g["log2_L1_SIZE"], g["MRL1"], marker="o", label=str(label))
-    plt.xlabel("log2(L1 SIZE in bytes)")
+        g = g.sort_values("L1_SIZE_KB")
+        plt.plot(g["L1_SIZE_KB"], g["MRL1"], marker="o", label=str(label))
+    ax = plt.gca()
+    ax.set_xscale("log", base=2)
+    _format_ticks(ax, df["L1_SIZE_KB"].dropna().unique(), "KB")
+    plt.xlabel("L1 SIZE (KB)")
     ax = plt.gca()
     ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=2))
     plt.ylabel("L1 miss rate (%)")
-    plt.title("Graph #1: L1 miss rate vs log2(L1 SIZE) by associativity")
+    plt.title("Graph #1: L1 miss rate vs L1 SIZE (log-scale)")
     plt.legend(title="Assoc")
     plt.grid(True, which="both", linestyle=":")
     plt.tight_layout()
@@ -235,14 +250,17 @@ def plot_graph1(df, outdir):
 
 def plot_graph2(df, outdir):
     df = df.copy()
-    df["log2_L1_SIZE"] = df["L1_SIZE"].apply(lambda x: math.log2(x) if x and x > 0 else None)
-    plt.figure()
+    df["L1_SIZE_KB"] = df["L1_SIZE"].apply(lambda x: (x / 1024) if x and x > 0 else None)
+    plt.figure(figsize=(8, 5))
     for label, g in df.groupby("L1_ASSOC"):
-        g = g.sort_values("log2_L1_SIZE")
-        plt.plot(g["log2_L1_SIZE"], g["AAT_ns"], marker="o", label=f"{int(label)}-way")
-    plt.xlabel("log2(L1 SIZE in bytes)")
+        g = g.sort_values("L1_SIZE_KB")
+        plt.plot(g["L1_SIZE_KB"], g["AAT_ns"], marker="o", label=f"{int(label)}-way")
+    ax = plt.gca()
+    ax.set_xscale("log", base=2)
+    _format_ticks(ax, df["L1_SIZE_KB"].dropna().unique(), "KB")
+    plt.xlabel("L1 SIZE (KB)")
     plt.ylabel("AAT (ns)")
-    plt.title("Graph #2: AAT vs log2(L1 SIZE), Given L1 Associativity")
+    plt.title("Graph #2: AAT vs L1 SIZE (log-scale) by associativity")
     plt.legend(title="L1 Assoc")
     plt.grid(True, which="both", linestyle=":")
     plt.tight_layout()
@@ -252,14 +270,17 @@ def plot_graph2(df, outdir):
 
 def plot_graph3(df, outdir):
     df = df.copy()
-    df["log2_L1_SIZE"] = df["L1_SIZE"].apply(lambda x: math.log2(x) if x and x > 0 else None)
-    plt.figure()
+    df["L1_SIZE_KB"] = df["L1_SIZE"].apply(lambda x: (x / 1024) if x and x > 0 else None)
+    plt.figure(figsize=(8, 5))
     for label, g in df.groupby("L1_ASSOC"):
-        g = g.sort_values("log2_L1_SIZE")
-        plt.plot(g["log2_L1_SIZE"], g["AAT_ns"], marker="o", label=f"{int(label)}-way")
-    plt.xlabel("log2(L1 SIZE in bytes)")
+        g = g.sort_values("L1_SIZE_KB")
+        plt.plot(g["L1_SIZE_KB"], g["AAT_ns"], marker="o", label=f"{int(label)}-way")
+    ax = plt.gca()
+    ax.set_xscale("log", base=2)
+    _format_ticks(ax, df["L1_SIZE_KB"].dropna().unique(), "KB")
+    plt.xlabel("L1 SIZE (KB)")
     plt.ylabel("AAT (ns)")
-    plt.title("Graph #3: AAT vs log2(L1 SIZE) with L2=16KB 8-way")
+    plt.title("Graph #3: AAT vs L1 SIZE (log-scale) with L2=16KB 8-way")
     plt.legend(title="L1 Assoc")
     plt.grid(True, which="both", linestyle=":")
     plt.tight_layout()
@@ -269,17 +290,20 @@ def plot_graph3(df, outdir):
 
 def plot_graph4(df, outdir):
     df = df.copy()
-    df["log2_BLOCKSIZE"] = df["BLOCKSIZE"].apply(lambda x: math.log2(x) if x and x > 0 else None)
-    plt.figure()
+    df["BLOCKSIZE_B"] = df["BLOCKSIZE"]
+    plt.figure(figsize=(8, 5))
     for sizeB, g in df.groupby("L1_SIZE"):
-        g = g.sort_values("log2_BLOCKSIZE")
+        g = g.sort_values("BLOCKSIZE_B")
         lbl = f"{int(sizeB/1024)}KB"
-        plt.plot(g["log2_BLOCKSIZE"], g["MRL1"], marker="o", label=lbl)
-    plt.xlabel("log2(BLOCKSIZE in bytes)")
+        plt.plot(g["BLOCKSIZE_B"], g["MRL1"], marker="o", label=lbl)
+    ax = plt.gca()
+    ax.set_xscale("log", base=2)
+    _format_ticks(ax, df["BLOCKSIZE_B"].dropna().unique(), "B")
+    plt.xlabel("BLOCKSIZE (bytes)")
     ax = plt.gca()
     ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=2))
     plt.ylabel("L1 miss rate (%)")
-    plt.title("Graph #4: L1 miss rate vs log2(BLOCKSIZE) (L1 4-way)")
+    plt.title("Graph #4: L1 miss rate vs BLOCKSIZE (log-scale, L1 4-way)")
     plt.legend(title="L1 Size", loc="upper left")
     plt.grid(True, which="both", linestyle=":")
     plt.tight_layout()
@@ -289,15 +313,18 @@ def plot_graph4(df, outdir):
 
 def plot_graph5(df, outdir):
     df = df.copy()
-    df["log2_L1_SIZE"] = df["L1_SIZE"].apply(lambda x: math.log2(x) if x and x > 0 else None)
-    plt.figure()
+    df["L1_SIZE_KB"] = df["L1_SIZE"].apply(lambda x: (x / 1024) if x and x > 0 else None)
+    plt.figure(figsize=(8, 5))
     for l2size, g in df.groupby("L2_SIZE"):
-        g = g.sort_values("log2_L1_SIZE")
+        g = g.sort_values("L1_SIZE_KB")
         lbl = f"L2={int(l2size/1024)}KB"
-        plt.plot(g["log2_L1_SIZE"], g["AAT_ns"], marker="o", label=lbl)
-    plt.xlabel("log2(L1 SIZE in bytes)")
+        plt.plot(g["L1_SIZE_KB"], g["AAT_ns"], marker="o", label=lbl)
+    ax = plt.gca()
+    ax.set_xscale("log", base=2)
+    _format_ticks(ax, df["L1_SIZE_KB"].dropna().unique(), "KB")
+    plt.xlabel("L1 SIZE (KB)")
     plt.ylabel("AAT (ns)")
-    plt.title("Graph #5: AAT vs log2(L1 SIZE) by L2 SIZE (L1 4-way, L2 8-way)")
+    plt.title("Graph #5: AAT vs L1 SIZE (log-scale) by L2 SIZE (L1 4-way, L2 8-way)")
     plt.legend(title="Config")
     plt.grid(True, which="both", linestyle=":")
     plt.tight_layout()

@@ -27,7 +27,6 @@
 #include "cache.h"
 
 static inline uint32_t ilog2_uint32(uint32_t x) {
-    // precondition: x is a power of two
     assert(x && ((x & (x - 1)) == 0));
     uint32_t n = 0;
     while ((1u << n) < x) ++n;
@@ -60,7 +59,7 @@ void Cache::init_storage_() {
     sets_vec_.assign(sets_, std::vector<Line>(cfg_.assoc));
     for (auto& set : sets_vec_) {
         for (uint32_t w = 0; w < set.size(); ++w) {
-            set[w].lru_age = w; // larger -> older
+            set[w].lru_age = w; // bigger == older
         }
     }
 }
@@ -88,7 +87,7 @@ int Cache::choose_victim_way(uint64_t set) {
     int victim = 0;
     uint32_t max_age = 0;
     for (int w = 0; w < static_cast<int>(lines.size()); ++w) {
-        if (!lines[w].valid) return w; // free slot preferred
+        if (!lines[w].valid) return w; 
         if (lines[w].lru_age >= max_age) {
             max_age = lines[w].lru_age;
             victim = w;
@@ -98,7 +97,7 @@ int Cache::choose_victim_way(uint64_t set) {
 }
 
 void Cache::touch_as_mru(uint64_t set, int way) {
-    // Placeholder LRU update: bump all valid ages; selected line becomes MRU (0).
+    // Update LRU
     auto& lines = sets_vec_[set];
     for (auto& ln : lines) { if (ln.valid) ++ln.lru_age; }
     lines[way].lru_age = 0;
@@ -156,7 +155,7 @@ bool Cache::access(Op op, uint32_t addr, Cache* next_level) {
     int way = find_way(set, tag);
     if (way >= 0) {
         if (op == Op::Write) {
-            sets_vec_[set][way].dirty = true; // WBWA: write hits mark dirty
+            sets_vec_[set][way].dirty = true; 
         }
         touch_as_mru(set, way);
         return true;
@@ -166,7 +165,7 @@ bool Cache::access(Op op, uint32_t addr, Cache* next_level) {
     if (op == Op::Read) stats_.read_misses += 1;
     else                stats_.write_misses += 1;
 
-    // WBWA + write-allocate: allocate on both read and write misses.
+    // Requires a WBWA + write-allocate: allocate on both read and write misses
     const bool make_dirty = (op == Op::Write);
     allocate_on_miss(addr, next_level, make_dirty);
     return false;
@@ -174,7 +173,7 @@ bool Cache::access(Op op, uint32_t addr, Cache* next_level) {
 
 void Cache::print_contents(std::ostream& os) const {
     for (std::size_t s = 0; s < sets_; ++s) {
-        // Gather valid lines
+       
         std::vector<Line> lines;
         lines.reserve(cfg_.assoc);
         for (const auto& ln : sets_vec_[s]) {
@@ -182,11 +181,10 @@ void Cache::print_contents(std::ostream& os) const {
         }
         if (lines.empty()) continue;
 
-        // Order MRU -> LRU (lru_age: 0 = MRU)
+        // (lru_age: 0 = MRU)
         std::sort(lines.begin(), lines.end(),
                   [](const Line& a, const Line& b){ return a.lru_age < b.lru_age; });
 
-        // Exact expected format:  set______N:␠␠<tag> [D] ...
         os << "set " << std::setw(6) << s << ":   ";
         bool first = true;
         for (const auto& ln : lines) {

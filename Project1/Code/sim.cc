@@ -42,11 +42,11 @@ static const char* basename_c(const char* path) {
     ./sim 32 8192 4 262144 8 3 10 gcc_trace.txt
 */
 int main (int argc, char *argv[]) {
-   FILE *fp;                 // File pointer.
-   char *trace_file;         // Trace file name.
-   cache_params_t params;    // See sim.h
-   char rw;                  // 'r' or 'w'
-   uint32_t addr;            // 32-bit address from trace
+   FILE *fp;                 
+   char *trace_file;         
+   cache_params_t params;    
+   char rw;                 
+   uint32_t addr;            
 
    // Expect exactly 8 command-line arguments (argc == 9 including program name).
    if (argc != 9) {
@@ -61,8 +61,8 @@ int main (int argc, char *argv[]) {
    params.L1_ASSOC  = (uint32_t) atoi(argv[3]);
    params.L2_SIZE   = (uint32_t) atoi(argv[4]);
    params.L2_ASSOC  = (uint32_t) atoi(argv[5]);
-   params.PREF_N    = (uint32_t) atoi(argv[6]);  // ECE463: parse but not used
-   params.PREF_M    = (uint32_t) atoi(argv[7]);  // ECE463: parse but not used
+   params.PREF_N    = (uint32_t) atoi(argv[6]);  
+   params.PREF_M    = (uint32_t) atoi(argv[7]); 
    trace_file       = argv[8];
 
    // Open trace
@@ -72,7 +72,6 @@ int main (int argc, char *argv[]) {
       exit(EXIT_FAILURE);
    }
 
-   // Print simulator configuration (trace file printed as basename only).
    printf("===== Simulator configuration =====\n");
    printf("BLOCKSIZE:  %u\n", params.BLOCKSIZE);
    printf("L1_SIZE:    %u\n", params.L1_SIZE);
@@ -83,7 +82,7 @@ int main (int argc, char *argv[]) {
    printf("PREF_M:     %u\n", params.PREF_M);
    printf("trace_file: %s\n\n", basename_c(trace_file));
 
-   // Build cache hierarchy (ECE463: no prefetch logic)
+   
    CacheConfig l1_cfg {
        "L1",
        (std::size_t)params.L1_SIZE,
@@ -105,7 +104,6 @@ int main (int argc, char *argv[]) {
    }
 
    // Read requests from the trace.
-   // NOTE: Leading space before %c skips whitespace/newlines between lines.
    while (fscanf(fp, " %c %x", &rw, &addr) == 2) {
       Cache::Op op;
       if (rw == 'r' || rw == 'R')      op = Cache::Op::Read;
@@ -121,7 +119,7 @@ int main (int argc, char *argv[]) {
 
    fclose(fp);
 
-   // Final reporting (format aligns with provided validation files)
+   
    AllStats totals;
    totals.l1 = l1.stats();
    if (has_l2) totals.l2 = l2->stats();

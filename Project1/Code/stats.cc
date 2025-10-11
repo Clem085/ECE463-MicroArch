@@ -43,19 +43,16 @@ void print_final_report(std::ostream& os,
     l1.print_contents(os);
 
     if (l2_opt) {
-        // Blank line between L1 and L2 contents (validator expects this)
+        // ADD Blank line between L1 and L2 contents VALIDATE
         os << "\n";
         os << "===== L2 contents =====\n";
         l2_opt->print_contents(os);
     }
-
-    // Blank line between contents and Measurements (validator expects this)
     os << "\n";
 
     const auto& A = totals.l1;
-    const auto& B = totals.l2; // zeros if no L2
+    const auto& B = totals.l2; 
 
-    // ----- Measurements (letters/labels; aligned columns; 4-decimal miss rates) -----
     const int label_w = 32;
 
     os << "===== Measurements =====\n";
@@ -69,8 +66,8 @@ void print_final_report(std::ostream& os,
     os << std::setprecision(6); // restore default precision
     os << "f. L1 writebacks:"             << std::setw(label_w - 16) << A.writebacks   << "\n";
 
-    // ECE463: no prefetching; still print L2/prefetch lines (zeros if unused)
-    uint64_t l2_reads_demand      = B.reads;        // demand fills only (no prefetch in 463)
+    // No prefetching
+    uint64_t l2_reads_demand      = B.reads;        // demand fills only 
     uint64_t l2_read_miss_demand  = B.read_misses;  // demand read misses
     uint64_t l2_reads_prefetch    = 0;
     uint64_t l2_read_miss_pref    = 0;
