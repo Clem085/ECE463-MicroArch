@@ -1,0 +1,1 @@
+trace,BLOCKSIZE,L1_SIZE,L1_ASSOC,L2_SIZE,L2_ASSOC,PREF_N,PREF_M,L1_reads,L1_read_misses,L1_writes,L1_write_misses,MRL1,L1_writebacks,L2_reads_not_pref,L2_read_misses_not_pref,L2_reads_from_pref,L2_read_misses_from_pref,L2_writes,L2_write_misses,MRL2,L2_writebacks,L1_prefetches,L2_prefetches,total_mem_traffic,AAT_ns
