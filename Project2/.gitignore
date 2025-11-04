@@ -1,0 +1,19 @@
+# Build artifacts
+sim
+*.o
+
+# Generated analysis outputs
+graphs/results/
+graphs/figs/
+graphs/.venv/
+
+# Temporary validation outputs
+out_*.txt
+trimmed_*.txt
+
+# Extracted documentation helpers
+proj2.txt
+proj2-report-template-v1.0.txt
+
+# Temporary directories created by scripts
+__pycache__/
