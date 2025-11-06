@@ -4,23 +4,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <tuple>
 #include <vector>
 
-struct SimulationStats {
-    std::uint64_t predictions = 0;
-    std::uint64_t mispredictions = 0;
-
-    void record(bool predicted_taken, bool actual_taken) {
-        ++predictions;
-        if (predicted_taken != actual_taken) {
-            ++mispredictions;
-        }
-    }
-};
-
-struct PredictionInfo {
-    bool prediction_taken = false;
+struct TableLookup {
+    bool predicted_taken = false;
     std::size_t index = 0;
 };
 
@@ -28,11 +15,10 @@ class BimodalPredictor {
 public:
     explicit BimodalPredictor(unsigned m_bits);
 
-    PredictionInfo predict(std::uint64_t pc) const;
-    void update(const PredictionInfo &info, bool taken);
+    TableLookup predict(std::uint64_t pc) const;
+    void update(const TableLookup &info, bool taken);
 
     const std::vector<std::uint8_t> &table() const { return counters_; }
-    unsigned index_bits() const { return m_bits_; }
 
 private:
     std::size_t index(std::uint64_t pc) const;
@@ -46,12 +32,10 @@ class GsharePredictor {
 public:
     GsharePredictor(unsigned m_bits, unsigned n_bits);
 
-    PredictionInfo predict(std::uint64_t pc) const;
-    void update(const PredictionInfo &info, bool taken, bool update_counter);
+    TableLookup predict(std::uint64_t pc) const;
+    void update(const TableLookup &info, bool taken, bool update_counter);
 
     const std::vector<std::uint8_t> &table() const { return counters_; }
-    unsigned index_bits() const { return m_bits_; }
-    unsigned history_bits() const { return n_bits_; }
 
 private:
     std::size_t index(std::uint64_t pc) const;
@@ -72,8 +56,8 @@ public:
     HybridPredictor(unsigned k_bits, unsigned m1_bits, unsigned n_bits, unsigned m2_bits);
 
     struct HybridInfo {
-        PredictionInfo gshare_info;
-        PredictionInfo bimodal_info;
+        TableLookup gshare_info;
+        TableLookup bimodal_info;
         std::size_t chooser_index = 0;
         bool use_gshare = false;
         bool overall_prediction = false;
