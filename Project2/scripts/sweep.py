@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""
-Generate predictor sweep data and plots for Project 2.
-
-This script reproduces the experiments requested in the project report template:
-  * Bimodal predictor sweep (m = 7..20) on gcc, jpeg, and perl traces.
-  * Gshare predictor sweep (m = 7..20, n = 0..m) on the gcc trace.
-
-Hybrid sweeps can be added by providing a JSON configuration file; see
-`load_hybrid_config` for details.
-"""
+""" Run the standard predictor sweeps and stash CSVs/plots. """
 
 from __future__ import annotations
 
@@ -26,7 +17,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 SIM_BIN = ROOT_DIR / "sim"
 GRAPH_ROOT = ROOT_DIR / "graphs"
 RESULTS_DIR = GRAPH_ROOT / "results"
-FIGS_DIR = GRAPH_ROOT / "figs"
+FIGS_DIR = GRAPH_ROOT / "figs"  # also holds the optional Python venv
 
 TRACES = {
     "gcc": "traces/gcc_trace.txt",
@@ -51,6 +42,7 @@ class SimulationResult:
 
 
 def ensure_paths() -> None:
+    """Create graphs/, graphs/results/, graphs/figs/ if they do not exist."""
     GRAPH_ROOT.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     FIGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -83,8 +75,7 @@ def run_simulation(arguments: Sequence[str]) -> SimulationResult:
 
 def bimodal_sweep(m_values: Iterable[int], traces: Dict[str, str]) -> Dict[str, List[Dict[str, float]]]:
     results: Dict[str, List[Dict[str, float]]] = {bench: [] for bench in traces}
-    for bench, trace_name in traces.items():
-        trace_path = trace_name
+    for bench, trace_path in traces.items():
         for m in m_values:
             sim_args = ["./sim", "bimodal", str(m), trace_path]
             sim_result = run_simulation(sim_args)
@@ -102,7 +93,7 @@ def bimodal_sweep(m_values: Iterable[int], traces: Dict[str, str]) -> Dict[str, 
 
 def gshare_sweep(m_values: Iterable[int]) -> List[Dict[str, float]]:
     data: List[Dict[str, float]] = []
-    trace_path = TRACES["gcc"]
+    trace_path = TRACES["gcc"]  # spec only asks for gcc on gshare sweep
     for m in m_values:
         for n in range(0, m + 1):
             sim_args = ["./sim", "gshare", str(m), str(n), trace_path]
@@ -121,18 +112,6 @@ def gshare_sweep(m_values: Iterable[int]) -> List[Dict[str, float]]:
 
 
 def load_hybrid_config(config_path: Optional[Path]) -> List[Tuple[int, int, int, int]]:
-    """
-    Load hybrid sweep configurations from a JSON file with the format:
-    {
-        "trace": "gcc_trace.txt",
-        "parameters": [
-            {"k": 8, "m1": 14, "n": 10, "m2": 5},
-            ...
-        ]
-    }
-    If no config is provided, a small default set inspired by the validation
-    runs is returned.
-    """
     if config_path:
         with config_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
@@ -141,6 +120,7 @@ def load_hybrid_config(config_path: Optional[Path]) -> List[Tuple[int, int, int,
             combos.append((entry["k"], entry["m1"], entry["n"], entry["m2"]))
         return combos
 
+    # default sweep points (loosely patterned after the validation runs)
     return [
         (8, 14, 10, 5),
         (8, 12, 8, 9),
@@ -256,7 +236,7 @@ def try_import_matplotlib():
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run Project 2 predictor sweeps.")
+    parser = argparse.ArgumentParser(description="Run predictor sweeps and capture CSV/plots.")
     parser.add_argument(
         "--bimodal",
         action="store_true",

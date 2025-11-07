@@ -1,221 +1,15 @@
-#include "sim.h"
-
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
+#include <cstdint>
+#include <cstring>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <vector>
+#include "sim_bp.h"
 
 namespace {
 
-constexpr std::uint8_t INIT_COUNTER = 2U;   // weakly taken
-constexpr std::uint8_t INIT_CHOOSER = 1U;   // slight bias towards gshare
-
-bool str_to_uint(const char *s, unsigned &value) {
-    if (!s || *s == '\0') {
-        return false;
-    }
-    char *endptr = nullptr;
-    unsigned long parsed = std::strtoul(s, &endptr, 10);
-    if (endptr == s || *endptr != '\0') {
-        return false;
-    }
-    value = static_cast<unsigned>(parsed);
-    return true;
-}
-
-bool is_taken(char outcome) {
-    return outcome == 't' || outcome == 'T';
-}
-
-bool is_not_taken(char outcome) {
-    return outcome == 'n' || outcome == 'N';
-}
-
-void print_stats(std::uint64_t predictions, std::uint64_t mispredictions) {
-    double rate = predictions ? static_cast<double>(mispredictions) / static_cast<double>(predictions) : 0.0;
-    std::printf("OUTPUT\n");
-    std::printf(" number of predictions:    %llu\n", static_cast<unsigned long long>(predictions));
-    std::printf(" number of mispredictions: %llu\n", static_cast<unsigned long long>(mispredictions));
-    std::printf(" misprediction rate:       %.2f%%\n", rate * 100.0);
-}
-
-template <typename Container>
-void print_table(const char *header, const Container &table) {
-    std::printf("%s\n", header);
-    for (std::size_t i = 0; i < table.size(); ++i) {
-        std::printf(" %zu\t%u\n", i, static_cast<unsigned>(table[i]));
-    }
-}
-
-} // namespace
-
-BimodalPredictor::BimodalPredictor(unsigned m_bits)
-    : m_bits_(m_bits),
-      mask_((m_bits == 0) ? 0 : ((static_cast<std::size_t>(1) << m_bits) - 1)),
-      counters_((m_bits == 0) ? 1 : (static_cast<std::size_t>(1) << m_bits), INIT_COUNTER) {
-    if (m_bits_ > (sizeof(std::size_t) * 8 - 1)) {
-        throw std::invalid_argument("m_bits too large for bimodal predictor");
-    }
-}
-
-TableLookup BimodalPredictor::predict(std::uint64_t pc) const {
-    std::size_t idx = index(pc);
-    bool pred = counters_[idx] >= 2;
-    return {pred, idx};
-}
-
-void BimodalPredictor::update(const TableLookup &info, bool taken) {
-    if (taken) {
-        if (counters_[info.index] < 3) {
-            ++counters_[info.index];
-        }
-    } else {
-        if (counters_[info.index] > 0) {
-            --counters_[info.index];
-        }
-    }
-}
-
-std::size_t BimodalPredictor::index(std::uint64_t pc) const {
-    if (m_bits_ == 0) {
-        return 0;
-    }
-    return static_cast<std::size_t>((pc >> 2) & mask_);
-}
-
-GsharePredictor::GsharePredictor(unsigned m_bits, unsigned n_bits)
-    : m_bits_(m_bits),
-      n_bits_(n_bits),
-      table_mask_((m_bits == 0) ? 0 : ((static_cast<std::size_t>(1) << m_bits) - 1)),
-      lower_mask_((m_bits > n_bits) ? ((static_cast<std::size_t>(1) << (m_bits - n_bits)) - 1) : 0),
-      history_mask_((n_bits == 0) ? 0 : ((static_cast<std::uint64_t>(1) << n_bits) - 1)),
-      counters_((m_bits == 0) ? 1 : (static_cast<std::size_t>(1) << m_bits), INIT_COUNTER),
-      ghr_(0) {
-    if (n_bits_ > m_bits_) {
-        throw std::invalid_argument("gshare requires n_bits <= m_bits");
-    }
-    if (m_bits_ > (sizeof(std::size_t) * 8 - 1)) {
-        throw std::invalid_argument("m_bits too large for gshare predictor");
-    }
-}
-
-TableLookup GsharePredictor::predict(std::uint64_t pc) const {
-    std::size_t idx = index(pc);
-    bool pred = counters_[idx] >= 2;
-    return {pred, idx};
-}
-
-void GsharePredictor::update(const TableLookup &info, bool taken, bool update_counter) {
-    if (update_counter) {
-        if (taken) {
-            increment_counter(info.index);
-        } else {
-            decrement_counter(info.index);
-        }
-    }
-
-    if (n_bits_ > 0) {
-        ghr_ >>= 1;
-        if (taken) {
-            ghr_ |= (static_cast<std::uint64_t>(1) << (n_bits_ - 1));
-        }
-        ghr_ &= history_mask_;
-    }
-}
-
-std::size_t GsharePredictor::index(std::uint64_t pc) const {
-    if (m_bits_ == 0) {
-        return 0;
-    }
-
-    std::size_t pc_index = static_cast<std::size_t>((pc >> 2) & table_mask_);
-    if (n_bits_ == 0) {
-        return pc_index;
-    }
-
-    std::size_t ghr_masked = static_cast<std::size_t>(ghr_ & history_mask_);
-    std::size_t upper_bits = pc_index >> (m_bits_ - n_bits_);
-    std::size_t xored = upper_bits ^ ghr_masked;
-    std::size_t recombined = (xored << (m_bits_ - n_bits_)) | (pc_index & lower_mask_);
-    return recombined;
-}
-
-void GsharePredictor::increment_counter(std::size_t idx) {
-    if (counters_[idx] < 3) {
-        ++counters_[idx];
-    }
-}
-
-void GsharePredictor::decrement_counter(std::size_t idx) {
-    if (counters_[idx] > 0) {
-        --counters_[idx];
-    }
-}
-
-HybridPredictor::HybridPredictor(unsigned k_bits, unsigned m1_bits, unsigned n_bits, unsigned m2_bits)
-    : k_bits_(k_bits),
-      chooser_mask_((k_bits == 0) ? 0 : ((static_cast<std::size_t>(1) << k_bits) - 1)),
-      chooser_counters_((k_bits == 0) ? 1 : (static_cast<std::size_t>(1) << k_bits), INIT_CHOOSER),
-      gshare_(m1_bits, n_bits),
-      bimodal_(m2_bits) {
-    if (k_bits_ > (sizeof(std::size_t) * 8 - 1)) {
-        throw std::invalid_argument("k_bits too large for hybrid predictor");
-    }
-}
-
-HybridPredictor::HybridInfo HybridPredictor::predict(std::uint64_t pc) {
-    HybridInfo info;
-    info.gshare_info = gshare_.predict(pc);
-    info.bimodal_info = bimodal_.predict(pc);
-    info.chooser_index = chooser_index(pc);
-    info.use_gshare = chooser_counters_[info.chooser_index] >= 2;
-    info.overall_prediction = info.use_gshare ? info.gshare_info.predicted_taken : info.bimodal_info.predicted_taken;
-    return info;
-}
-
-void HybridPredictor::update(const HybridInfo &info, bool taken) {
-    bool gshare_correct = (info.gshare_info.predicted_taken == taken);
-    bool bimodal_correct = (info.bimodal_info.predicted_taken == taken);
-
-    if (info.use_gshare) {
-        gshare_.update(info.gshare_info, taken, true);
-    } else {
-        bimodal_.update(info.bimodal_info, taken);
-        gshare_.update(info.gshare_info, taken, false);
-    }
-
-    if (gshare_correct && !bimodal_correct) {
-        increment_chooser(info.chooser_index);
-    } else if (bimodal_correct && !gshare_correct) {
-        decrement_chooser(info.chooser_index);
-    }
-}
-
-std::size_t HybridPredictor::chooser_index(std::uint64_t pc) const {
-    if (k_bits_ == 0) {
-        return 0;
-    }
-    return static_cast<std::size_t>((pc >> 2) & chooser_mask_);
-}
-
-void HybridPredictor::increment_chooser(std::size_t idx) {
-    if (chooser_counters_[idx] < 3) {
-        ++chooser_counters_[idx];
-    }
-}
-
-void HybridPredictor::decrement_chooser(std::size_t idx) {
-    if (chooser_counters_[idx] > 0) {
-        --chooser_counters_[idx];
-    }
-}
-
-std::string build_command_line(int argc, char *argv[]) {
+std::string build_command_line(int argc, char* argv[]) {
     std::ostringstream oss;
     oss << " ";
     for (int i = 0; i < argc; ++i) {
@@ -227,194 +21,296 @@ std::string build_command_line(int argc, char *argv[]) {
     return oss.str();
 }
 
-void run_bimodal(const SimulationConfig &config, const std::string &command_line) {
-    std::ifstream trace(config.trace_file);
-    if (!trace) {
-        std::fprintf(stderr, "Error: Unable to open file %s\n", config.trace_file.c_str());
+std::size_t mask_bits(unsigned bits) {
+    if (bits == 0) {
+        return 0;
+    }
+    return (static_cast<std::size_t>(1) << bits) - 1;
+}
+
+void increment_counter(int &value) {
+    if (value < 3) {
+        ++value;
+    }
+}
+
+void decrement_counter(int &value) {
+    if (value > 0) {
+        --value;
+    }
+}
+
+void print_stats(std::uint64_t predictions, std::uint64_t mispredictions) {
+    double rate = predictions ? static_cast<double>(mispredictions) / static_cast<double>(predictions) : 0.0;
+    std::printf("OUTPUT\n");
+    std::printf(" number of predictions:    %llu\n", static_cast<unsigned long long>(predictions));
+    std::printf(" number of mispredictions: %llu\n", static_cast<unsigned long long>(mispredictions));
+    std::printf(" misprediction rate:       %.2f%%\n", rate * 100.0);
+}
+
+void print_table(const char *header, const std::vector<int> &table) {
+    std::printf("%s\n", header);
+    for (std::size_t i = 0; i < table.size(); ++i) {
+        std::printf(" %zu\t%d\n", i, table[i]);
+    }
+}
+
+std::size_t bimodal_index(std::uint64_t addr, unsigned bits) {
+    if (bits == 0) {
+        return 0;
+    }
+    return static_cast<std::size_t>((addr >> 2) & mask_bits(bits));
+}
+
+std::size_t gshare_index(std::uint64_t addr, unsigned m_bits, unsigned n_bits, std::uint64_t ghr) {
+    if (m_bits == 0) {
+        return 0;
+    }
+
+    std::size_t table_mask = mask_bits(m_bits);
+    std::size_t pc_index = static_cast<std::size_t>((addr >> 2) & table_mask);
+    if (n_bits == 0) {
+        return pc_index;
+    }
+
+    std::size_t upper = pc_index >> (m_bits - n_bits);
+    std::size_t lower_mask = (m_bits > n_bits) ? mask_bits(m_bits - n_bits) : 0;
+    std::size_t ghr_bits = static_cast<std::size_t>(ghr & mask_bits(n_bits));
+    std::size_t xored = upper ^ ghr_bits;
+    return (xored << (m_bits - n_bits)) | (pc_index & lower_mask);
+}
+
+void update_ghr(std::uint64_t &ghr, unsigned n_bits, bool taken) {
+    if (n_bits == 0) {
+        return;
+    }
+    ghr >>= 1;
+    if (taken) {
+        ghr |= (static_cast<std::uint64_t>(1) << (n_bits - 1));
+    }
+    ghr &= mask_bits(n_bits);
+}
+
+void run_bimodal(const bp_params &params, const char *trace_file, const std::string &command_line) {
+    FILE *FP = fopen(trace_file, "r");
+    if (FP == NULL) {
+        std::printf("Error: Unable to open file %s\n", trace_file);
         std::exit(EXIT_FAILURE);
     }
 
-    BimodalPredictor predictor(config.m2);
+    std::size_t entries = (params.M2 == 0) ? 1 : (static_cast<std::size_t>(1) << params.M2);
+    std::vector<int> table(entries, 2);
     std::uint64_t predictions = 0;
-    std::uint64_t misses = 0;
+    std::uint64_t mispredictions = 0;
 
-    std::string addr_token;
-    char outcome = '\0';
-    while (trace >> addr_token >> outcome) {
-        std::uint64_t pc = std::stoull(addr_token, nullptr, 16);
-        if (!is_taken(outcome) && !is_not_taken(outcome)) {
-            std::fprintf(stderr, "Error: Invalid outcome '%c'\n", outcome);
-            std::exit(EXIT_FAILURE);
-        }
-        bool taken = is_taken(outcome);
-        TableLookup info = predictor.predict(pc);
+    unsigned long long addr;
+    char str[2];
+    while (fscanf(FP, "%llx %s", &addr, str) != EOF) {
+        bool taken = (str[0] == 't' || str[0] == 'T');
+        std::size_t idx = bimodal_index(addr, params.M2);
+        bool prediction = table[idx] >= 2;
         ++predictions;
-        if (info.predicted_taken != taken) {
-            ++misses;
+        if (prediction != taken) {
+            ++mispredictions;
         }
-        predictor.update(info, taken);
+
+        if (taken) {
+            increment_counter(table[idx]);
+        } else {
+            decrement_counter(table[idx]);
+        }
     }
+    fclose(FP);
 
     std::printf("COMMAND\n%s\n", command_line.c_str());
-    print_stats(predictions, misses);
-    print_table("FINAL BIMODAL CONTENTS", predictor.table());
+    print_stats(predictions, mispredictions);
+    print_table("FINAL BIMODAL CONTENTS", table);
 }
 
-void run_gshare(const SimulationConfig &config, const std::string &command_line) {
-    std::ifstream trace(config.trace_file);
-    if (!trace) {
-        std::fprintf(stderr, "Error: Unable to open file %s\n", config.trace_file.c_str());
+void run_gshare(const bp_params &params, const char *trace_file, const std::string &command_line) {
+    FILE *FP = fopen(trace_file, "r");
+    if (FP == NULL) {
+        std::printf("Error: Unable to open file %s\n", trace_file);
         std::exit(EXIT_FAILURE);
     }
 
-    GsharePredictor predictor(config.m1, config.n);
+    std::size_t entries = (params.M1 == 0) ? 1 : (static_cast<std::size_t>(1) << params.M1);
+    std::vector<int> table(entries, 2);
     std::uint64_t predictions = 0;
-    std::uint64_t misses = 0;
+    std::uint64_t mispredictions = 0;
+    std::uint64_t ghr = 0;
 
-    std::string addr_token;
-    char outcome = '\0';
-    while (trace >> addr_token >> outcome) {
-        std::uint64_t pc = std::stoull(addr_token, nullptr, 16);
-        if (!is_taken(outcome) && !is_not_taken(outcome)) {
-            std::fprintf(stderr, "Error: Invalid outcome '%c'\n", outcome);
-            std::exit(EXIT_FAILURE);
-        }
-        bool taken = is_taken(outcome);
-        TableLookup info = predictor.predict(pc);
+    unsigned long long addr;
+    char str[2];
+    while (fscanf(FP, "%llx %s", &addr, str) != EOF) {
+        bool taken = (str[0] == 't' || str[0] == 'T');
+        std::size_t idx = gshare_index(addr, params.M1, params.N, ghr);
+        bool prediction = table[idx] >= 2;
         ++predictions;
-        if (info.predicted_taken != taken) {
-            ++misses;
+        if (prediction != taken) {
+            ++mispredictions;
         }
-        predictor.update(info, taken, true);
+
+        if (taken) {
+            increment_counter(table[idx]);
+        } else {
+            decrement_counter(table[idx]);
+        }
+        update_ghr(ghr, params.N, taken);
     }
+    fclose(FP);
 
     std::printf("COMMAND\n%s\n", command_line.c_str());
-    print_stats(predictions, misses);
-    print_table("FINAL GSHARE CONTENTS", predictor.table());
+    print_stats(predictions, mispredictions);
+    print_table("FINAL GSHARE CONTENTS", table);
 }
 
-void run_hybrid(const SimulationConfig &config, const std::string &command_line) {
-    std::ifstream trace(config.trace_file);
-    if (!trace) {
-        std::fprintf(stderr, "Error: Unable to open file %s\n", config.trace_file.c_str());
+void run_hybrid(const bp_params &params, const char *trace_file, const std::string &command_line) {
+    FILE *FP = fopen(trace_file, "r");
+    if (FP == NULL) {
+        std::printf("Error: Unable to open file %s\n", trace_file);
         std::exit(EXIT_FAILURE);
     }
 
-    HybridPredictor predictor(config.k, config.m1, config.n, config.m2);
-    std::uint64_t predictions = 0;
-    std::uint64_t misses = 0;
+    std::size_t chooser_entries = (params.K == 0) ? 1 : (static_cast<std::size_t>(1) << params.K);
+    std::size_t gshare_entries = (params.M1 == 0) ? 1 : (static_cast<std::size_t>(1) << params.M1);
+    std::size_t bimodal_entries = (params.M2 == 0) ? 1 : (static_cast<std::size_t>(1) << params.M2);
 
-    std::string addr_token;
-    char outcome = '\0';
-    while (trace >> addr_token >> outcome) {
-        std::uint64_t pc = std::stoull(addr_token, nullptr, 16);
-        if (!is_taken(outcome) && !is_not_taken(outcome)) {
-            std::fprintf(stderr, "Error: Invalid outcome '%c'\n", outcome);
-            std::exit(EXIT_FAILURE);
-        }
-        bool taken = is_taken(outcome);
-        HybridPredictor::HybridInfo info = predictor.predict(pc);
+    std::vector<int> chooser_table(chooser_entries, 1);
+    std::vector<int> gshare_table(gshare_entries, 2);
+    std::vector<int> bimodal_table(bimodal_entries, 2);
+
+    std::uint64_t predictions = 0;
+    std::uint64_t mispredictions = 0;
+    std::uint64_t ghr = 0;
+
+    unsigned long long addr;
+    char str[2];
+    while (fscanf(FP, "%llx %s", &addr, str) != EOF) {
+        bool taken = (str[0] == 't' || str[0] == 'T');
+
+        std::size_t chooser_idx = (params.K == 0) ? 0 : static_cast<std::size_t>((addr >> 2) & mask_bits(params.K));
+        std::size_t g_idx = gshare_index(addr, params.M1, params.N, ghr);
+        std::size_t b_idx = bimodal_index(addr, params.M2);
+
+        bool gshare_prediction = gshare_table[g_idx] >= 2;
+        bool bimodal_prediction = bimodal_table[b_idx] >= 2;
+        bool use_gshare = chooser_table[chooser_idx] >= 2;
+        bool final_prediction = use_gshare ? gshare_prediction : bimodal_prediction;
+
         ++predictions;
-        if (info.overall_prediction != taken) {
-            ++misses;
+        if (final_prediction != taken) {
+            ++mispredictions;
         }
-        predictor.update(info, taken);
+
+        if (use_gshare) {
+            if (taken) {
+                increment_counter(gshare_table[g_idx]);
+            } else {
+                decrement_counter(gshare_table[g_idx]);
+            }
+        } else {
+            if (taken) {
+                increment_counter(bimodal_table[b_idx]);
+            } else {
+                decrement_counter(bimodal_table[b_idx]);
+            }
+        }
+
+        bool gshare_correct = (gshare_prediction == taken);
+        bool bimodal_correct = (bimodal_prediction == taken);
+        if (gshare_correct && !bimodal_correct) {
+            increment_counter(chooser_table[chooser_idx]);
+        } else if (bimodal_correct && !gshare_correct) {
+            decrement_counter(chooser_table[chooser_idx]);
+        }
+
+        update_ghr(ghr, params.N, taken);
     }
+    fclose(FP);
 
     std::printf("COMMAND\n%s\n", command_line.c_str());
-    print_stats(predictions, misses);
-    print_table("FINAL CHOOSER CONTENTS", predictor.chooser_table());
-    print_table("FINAL GSHARE CONTENTS", predictor.gshare().table());
-    print_table("FINAL BIMODAL CONTENTS", predictor.bimodal().table());
+    print_stats(predictions, mispredictions);
+    print_table("FINAL CHOOSER CONTENTS", chooser_table);
+    print_table("FINAL GSHARE CONTENTS", gshare_table);
+    print_table("FINAL BIMODAL CONTENTS", bimodal_table);
 }
 
-void run_simulation(const SimulationConfig &config, const std::string &command_line) {
-    switch (config.mode) {
-        case SimulationConfig::Mode::Bimodal:
-            run_bimodal(config, command_line);
-            break;
-        case SimulationConfig::Mode::Gshare:
-            run_gshare(config, command_line);
-            break;
-        case SimulationConfig::Mode::Hybrid:
-            run_hybrid(config, command_line);
-            break;
+} // namespace
+
+int main (int argc, char* argv[])
+{
+    FILE *FP;               // File handler
+    char *trace_file;       // Variable that holds trace file name;
+    bp_params params;       // look at sim_bp.h header file for the the definition of struct bp_params
+    char outcome;           // Variable holds branch outcome
+    unsigned long int addr; // Variable holds the address read from input file
+    
+    if (!(argc == 4 || argc == 5 || argc == 7))
+    {
+        printf("Error: Wrong number of inputs:%d\n", argc-1);
+        exit(EXIT_FAILURE);
     }
-}
-
-static SimulationConfig parse_arguments(int argc, char *argv[]) {
-    if (!(argc == 4 || argc == 5 || argc == 7)) {
-        std::fprintf(stderr, "Error: Wrong number of inputs:%d\n", argc - 1);
-        std::exit(EXIT_FAILURE);
+    
+    params.bp_name  = argv[1];
+    
+    // strtoul() converts char* to unsigned long. It is included in <stdlib.h>
+    if(strcmp(params.bp_name, "bimodal") == 0)              // Bimodal
+    {
+        if(argc != 4)
+        {
+            printf("Error: %s wrong number of inputs:%d\n", params.bp_name, argc-1);
+            exit(EXIT_FAILURE);
+        }
+        params.M2       = strtoul(argv[2], NULL, 10);
+        trace_file      = argv[3];
+        printf("COMMAND\n%s %s %lu %s\n", argv[0], params.bp_name, params.M2, trace_file);
+        run_bimodal(params, trace_file, build_command_line(argc, argv));
+        return 0;
     }
-
-    SimulationConfig config{};
-    std::string mode = argv[1];
-
-    if (mode == "bimodal") {
-        if (argc != 4) {
-            std::fprintf(stderr, "Error: %s wrong number of inputs:%d\n", mode.c_str(), argc - 1);
-            std::exit(EXIT_FAILURE);
+    else if(strcmp(params.bp_name, "gshare") == 0)          // Gshare
+    {
+        if(argc != 5)
+        {
+            printf("Error: %s wrong number of inputs:%d\n", params.bp_name, argc-1);
+            exit(EXIT_FAILURE);
         }
-        unsigned m2 = 0;
-        if (!str_to_uint(argv[2], m2)) {
-            std::fprintf(stderr, "Error: invalid M2 value\n");
-            std::exit(EXIT_FAILURE);
+        params.M1       = strtoul(argv[2], NULL, 10);
+        params.N        = strtoul(argv[3], NULL, 10);
+        trace_file      = argv[4];
+        if (params.N > params.M1) {
+            printf("Error: gshare requires N <= M1\n");
+            exit(EXIT_FAILURE);
         }
-        config.mode = SimulationConfig::Mode::Bimodal;
-        config.m2 = m2;
-        config.trace_file = argv[3];
-    } else if (mode == "gshare") {
-        if (argc != 5) {
-            std::fprintf(stderr, "Error: %s wrong number of inputs:%d\n", mode.c_str(), argc - 1);
-            std::exit(EXIT_FAILURE);
-        }
-
-        unsigned m1 = 0;
-        unsigned n = 0;
-        if (!str_to_uint(argv[2], m1) || !str_to_uint(argv[3], n)) {
-            std::fprintf(stderr, "Error: invalid M1 or N value\n");
-            std::exit(EXIT_FAILURE);
-        }
-        if (n > m1) {
-            std::fprintf(stderr, "Error: gshare requires N <= M1\n");
-            std::exit(EXIT_FAILURE);
-        }
-        config.mode = SimulationConfig::Mode::Gshare;
-        config.m1 = m1;
-        config.n = n;
-        config.trace_file = argv[4];
-    } else if (mode == "hybrid") {
-        if (argc != 7) {
-            std::fprintf(stderr, "Error: %s wrong number of inputs:%d\n", mode.c_str(), argc - 1);
-            std::exit(EXIT_FAILURE);
-        }
-        unsigned k = 0, m1 = 0, n = 0, m2 = 0;
-        if (!str_to_uint(argv[2], k) || !str_to_uint(argv[3], m1) || !str_to_uint(argv[4], n) || !str_to_uint(argv[5], m2)) {
-            std::fprintf(stderr, "Error: invalid hybrid parameter\n");
-            std::exit(EXIT_FAILURE);
-        }
-        if (n > m1) {
-            std::fprintf(stderr, "Error: hybrid requires N <= M1\n");
-            std::exit(EXIT_FAILURE);
-        }
-        config.mode = SimulationConfig::Mode::Hybrid;
-        config.k = k;
-        config.m1 = m1;
-        config.n = n;
-        config.m2 = m2;
-        config.trace_file = argv[6];
-    } else {
-        std::fprintf(stderr, "Error: Wrong branch predictor name:%s\n", argv[1]);
-        std::exit(EXIT_FAILURE);
+        printf("COMMAND\n%s %s %lu %lu %s\n", argv[0], params.bp_name, params.M1, params.N, trace_file);
+        run_gshare(params, trace_file, build_command_line(argc, argv));
+        return 0;
     }
-
-    return config;
-}
-
-int main(int argc, char *argv[]) {
-    SimulationConfig config = parse_arguments(argc, argv);
-    std::string command_line = build_command_line(argc, argv);
-    run_simulation(config, command_line);
+    else if(strcmp(params.bp_name, "hybrid") == 0)          // Hybrid
+    {
+        if(argc != 7)
+        {
+            printf("Error: %s wrong number of inputs:%d\n", params.bp_name, argc-1);
+            exit(EXIT_FAILURE);
+        }
+        params.K        = strtoul(argv[2], NULL, 10);
+        params.M1       = strtoul(argv[3], NULL, 10);
+        params.N        = strtoul(argv[4], NULL, 10);
+        params.M2       = strtoul(argv[5], NULL, 10);
+        trace_file      = argv[6];
+        if (params.N > params.M1) {
+            printf("Error: hybrid requires N <= M1\n");
+            exit(EXIT_FAILURE);
+        }
+        printf("COMMAND\n%s %s %lu %lu %lu %lu %s\n", argv[0], params.bp_name, params.K, params.M1, params.N, params.M2, trace_file);
+        run_hybrid(params, trace_file, build_command_line(argc, argv));
+        return 0;
+    }
+    else
+    {
+        printf("Error: Wrong branch predictor name:%s\n", params.bp_name);
+        exit(EXIT_FAILURE);
+    }
+    
     return 0;
 }
