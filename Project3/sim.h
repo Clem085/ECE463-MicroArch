@@ -6,13 +6,9 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include "project3_read_trace/cpp_files/sim_proc.h"
 
-struct ProcParams {
-    std::size_t rob_size;
-    std::size_t iq_size;
-    std::size_t width;
-    std::string trace_file;
-};
+using ProcParams = proc_params;
 
 enum Stage {
     FE = 0,
@@ -55,7 +51,7 @@ struct Instruction {
 
 class Simulator {
 public:
-    explicit Simulator(const ProcParams &params);
+    explicit Simulator(const ProcParams &params, const std::string &trace_file);
     ~Simulator();
 
     void run();
@@ -94,6 +90,7 @@ private:
     int op_latency(int op_type) const;
 
     ProcParams params_;
+    std::string trace_file_;
     FILE *trace_fp_ = nullptr;
     bool trace_depleted_ = false;
 

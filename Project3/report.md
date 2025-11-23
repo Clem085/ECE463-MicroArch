@@ -5,39 +5,38 @@
 **Honor Pledge:** “I have neither given nor received unauthorized aid on this project.”
 
 ## Validation Status
-- Simulator validated against provided `val1.txt` when invoked as `./sim 16 8 1 val_trace_gcc1`.
-- `tests/run_tests.sh` passes for all synthetic traces.
-- Experiments scripts prepared for GCC and Perl traces.
+- `tests/run_tests.sh` → PASS (trace_chain, trace_parallel, trace_mix).
+- Validation diff vs `validation/validation/val1.txt` matches except for expected trace path string (`proj3-traces/val_trace_gcc1` vs `val_trace_gcc1`).
+- Spot-check on `proj3-traces/val_trace_perl1` shows sane per-instruction timing (first 10 lines reviewed).
 
 ## A. Large ROB, Effect of IQ_SIZE (ROB_SIZE = 512)
 
-- Run `experiments/run_experiments.sh` then `experiments/parse_results.py` to populate `experiments/results.csv`.
-- Generate graphs: `experiments/plot_graphs.py` (outputs to `experiments/graphs/`).
-
-Place graphs here:
-- GCC: `experiments/graphs/iq_sweep_val_trace_gcc1.png`
-- Perl: `experiments/graphs/iq_sweep_val_trace_perl1.png`
+- Graphs generated (after full sweep + parse):
+  - GCC: `experiments/graphs/iq_sweep_val_trace_gcc1.png`
+  - Perl: `experiments/graphs/iq_sweep_val_trace_perl1.png`
+- Graphs (embedded):
+  ![experiments/graphs/iq_sweep_val_trace_gcc1.png](experiments/graphs/iq_sweep_val_trace_gcc1.png)
+  ![experiments/graphs/iq_sweep_val_trace_perl1.png](experiments/graphs/iq_sweep_val_trace_perl1.png)
 
 ### Optimized IQ_SIZE per WIDTH (within 6% of IQ=256 IPC)
 
-Generate table with `python experiments/fill_report_table.py` after creating `results.csv`.
-
 | Benchmark | W=1 | W=2 | W=4 | W=8 |
 |-----------|----|----|----|----|
-| val_trace_gcc1 | *auto-fill* | *auto-fill* | *auto-fill* | *auto-fill* |
-| val_trace_perl1 | *auto-fill* | *auto-fill* | *auto-fill* | *auto-fill* |
+| val_trace_gcc1 | 8 | 16 | 32 | 64 |
+| val_trace_perl1 | 8 | 16 | 64 | 128 |
 
 ### Discussion (Draft)
-- As WIDTH increases, IQ must grow to expose enough independent instructions; diminishing returns appear once IQ passes the optimized size above.
-- Perl vs GCC: if Perl shows larger optimized IQ at higher WIDTH, it suggests denser dependencies or more long-latency ops in Perl traces.
+- As WIDTH increases, IQ must grow to expose enough independent instructions; beyond the optimized sizes above, IPC gains flatten.
+- Perl needs larger IQs at W=4 and W=8 (64/128) than GCC (32/64), hinting denser dependencies or more long-latency ops in the Perl trace.
 
 ## B. Effect of ROB_SIZE (using optimized IQ per WIDTH)
 
-- Use `experiments/plot_graphs.py` to generate ROB sweep graphs with optimized IQs.
-
-Place graphs here:
-- GCC: `experiments/graphs/rob_sweep_val_trace_gcc1.png`
-- Perl: `experiments/graphs/rob_sweep_val_trace_perl1.png`
+- Graphs generated:
+  - GCC: `experiments/graphs/rob_sweep_val_trace_gcc1.png`
+  - Perl: `experiments/graphs/rob_sweep_val_trace_perl1.png`
+- Graphs (embedded):
+  ![experiments/graphs/rob_sweep_val_trace_gcc1.png](experiments/graphs/rob_sweep_val_trace_gcc1.png)
+  ![experiments/graphs/rob_sweep_val_trace_perl1.png](experiments/graphs/rob_sweep_val_trace_perl1.png)
 
 ### Discussion (Draft)
 - IPC scales with ROB until instruction window captures enough parallelism; beyond that point returns flatten.
@@ -48,8 +47,23 @@ Place graphs here:
 2. `./experiments/run_experiments.sh`
 3. `./experiments/parse_results.py`
 4. `./experiments/plot_graphs.py`
-5. `./experiments/fill_report_table.py` (copy table values above).
+5. `./experiments/fill_report_table.py` (table already filled above; rerun if simulator changes).
 
 ## Notes
 - All scripts assume traces at `proj3-traces/val_trace_gcc1` and `proj3-traces/val_trace_perl1`.
 - Graphs and tables should be updated after rerunning experiments on the final simulator build.
+
+## Run Log (latest)
+- Unit tests: `./tests/run_tests.sh` → all PASS (trace_chain / trace_parallel / trace_mix).
+- Validation check: `./sim 16 8 1 proj3-traces/val_trace_gcc1 | diff -iw - validation/validation/val1.txt` shows only the expected command-line path difference (`proj3-traces/val_trace_gcc1` vs `val_trace_gcc1`).
+- Perl trace spot-check: `./sim 16 8 1 proj3-traces/val_trace_perl1 | head` produced sane per-instruction timing (see console log).
+- Experiments run: `./experiments/run_experiments.sh` → full sweep completed; `parse_results.py` wrote 240 rows to `experiments/results.csv`.
+- Graphs generated: `./experiments/plot_graphs.py` after setting execute perms → wrote IQ/ROB sweep PNGs under `experiments/graphs/`.
+- Optimal IQ summary from `plot_graphs.py`:
+  - val_trace_gcc1: W1=8, W2=16, W4=32, W8=64
+  - val_trace_perl1: W1=8, W2=16, W4=64, W8=128
+- Report table helper: `./experiments/fill_report_table.py` emitted:
+  | Benchmark | W=1 | W=2 | W=4 | W=8 |
+  |-----------|----|----|----|----|
+  | val_trace_gcc1 | 8 | 16 | 32 | 64 |
+  | val_trace_perl1 | 8 | 16 | 64 | 128 |

@@ -6,10 +6,11 @@
 #include <cstring>
 #include <iostream>
 
-Simulator::Simulator(const ProcParams &params) : params_(params) {
-    trace_fp_ = fopen(params_.trace_file.c_str(), "r");
+Simulator::Simulator(const ProcParams &params, const std::string &trace_file)
+    : params_(params), trace_file_(trace_file) {
+    trace_fp_ = fopen(trace_file_.c_str(), "r");
     if (!trace_fp_) {
-        std::fprintf(stderr, "Error: Unable to open file %s\n", params_.trace_file.c_str());
+        std::fprintf(stderr, "Error: Unable to open file %s\n", trace_file_.c_str());
         std::exit(EXIT_FAILURE);
     }
 
@@ -465,7 +466,7 @@ void Simulator::run() {
     double ipc = inst_retired_ == 0 ? 0.0 : static_cast<double>(inst_retired_) / static_cast<double>(cycle_);
     std::printf("# === Simulator Command =========\n");
     std::printf("# ./sim %zu %zu %zu %s\n", params_.rob_size, params_.iq_size, params_.width,
-                params_.trace_file.c_str());
+                trace_file_.c_str());
     std::printf("# === Processor Configuration ===\n");
     std::printf("# ROB_SIZE = %zu\n", params_.rob_size);
     std::printf("# IQ_SIZE  = %zu\n", params_.iq_size);
@@ -486,9 +487,9 @@ int main(int argc, char *argv[]) {
     params.rob_size = std::strtoul(argv[1], nullptr, 10);
     params.iq_size = std::strtoul(argv[2], nullptr, 10);
     params.width = std::strtoul(argv[3], nullptr, 10);
-    params.trace_file = argv[4];
+    std::string trace = argv[4];
 
-    Simulator sim(params);
+    Simulator sim(params, trace);
     sim.run();
     return 0;
 }
