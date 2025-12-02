@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
-#include "project3_read_trace/cpp_files/sim_proc.h"
+#include "sim_proc.h"
 
 using ProcParams = proc_params;
 

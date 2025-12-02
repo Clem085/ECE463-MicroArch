@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// sim.cc
+// Code created by Connor Savugot
+// Core components of an out-of-order pipeline simulator: ROB management,
+// stage timing, writeback, and retirement.
+// -----------------------------------------------------------------------------
+
 #include "sim.h"
 
 #include <algorithm>
@@ -8,12 +15,15 @@
 
 Simulator::Simulator(const ProcParams &params, const std::string &trace_file)
     : params_(params), trace_file_(trace_file) {
+
+    // Open instruction trace.
     trace_fp_ = fopen(trace_file_.c_str(), "r");
     if (!trace_fp_) {
         std::fprintf(stderr, "Error: Unable to open file %s\n", trace_file_.c_str());
         std::exit(EXIT_FAILURE);
     }
 
+    // Initialize RMT and ROB.
     rmt_.fill(-1);
     rob_.resize(params_.rob_size);
 }
@@ -25,18 +35,16 @@ Simulator::~Simulator() {
 }
 
 int Simulator::op_latency(int op_type) const {
+    // Simple latency model: ALU = 1, medium = 2, mult/long = 5.
     switch (op_type) {
-    case 0:
-        return 1;
-    case 1:
-        return 2;
-    case 2:
-    default:
-        return 5;
+    case 0: return 1;
+    case 1: return 2;
+    default: return 5;
     }
 }
 
 void Simulator::start_stage(Instruction *inst, Stage st, long long begin_cycle) {
+    // Start a pipeline stage only once.
     if (inst->stages[st].begin == -1) {
         inst->stages[st].begin = begin_cycle;
         inst->stages[st].duration = 0;
@@ -44,10 +52,12 @@ void Simulator::start_stage(Instruction *inst, Stage st, long long begin_cycle) 
 }
 
 bool Simulator::rob_has_space(std::size_t needed) const {
+    // Check remaining ROB capacity.
     return needed <= (params_.rob_size - static_cast<std::size_t>(rob_count_));
 }
 
 int Simulator::rob_allocate(Instruction *inst) {
+    // Allocate the next ROB entry.
     int idx = rob_tail_;
     rob_[idx].valid = true;
     rob_[idx].ready = false;
@@ -60,27 +70,27 @@ int Simulator::rob_allocate(Instruction *inst) {
 }
 
 void Simulator::retire_stage() {
-    // Instructions that have entered RT stage accumulate duration each cycle until retirement.
+    // Increment RT duration on any instruction already in RT.
     int idx = rob_head_;
     for (int i = 0; i < rob_count_; ++i) {
-        ROBEntry &entry = rob_[idx];
-        if (entry.valid && entry.inst->rt_started && !entry.inst->retired) {
-            entry.inst->stages[RT].duration++;
+        ROBEntry &e = rob_[idx];
+        if (e.valid && e.inst->rt_started && !e.inst->retired) {
+            e.inst->stages[RT].duration++;
         }
         idx = (idx + 1) % static_cast<int>(params_.rob_size);
     }
 
-    int retired_this_cycle = 0;
-    while (retired_this_cycle < static_cast<int>(params_.width) && rob_count_ > 0) {
+    // Retire up to machine width, in program order.
+    int retired = 0;
+    while (retired < static_cast<int>(params_.width) && rob_count_ > 0) {
         ROBEntry &head = rob_[rob_head_];
-        if (!head.valid || !head.ready) {
-            break;
-        }
+        if (!head.valid || !head.ready) break;
 
         Instruction *inst = head.inst;
         inst->retired = true;
         ++inst_retired_;
 
+        // Clear mapping if this ROB entry produced it.
         if (inst->dest != -1 && rmt_[inst->dest] == rob_head_) {
             rmt_[inst->dest] = -1;
         }
@@ -88,24 +98,28 @@ void Simulator::retire_stage() {
         head.valid = false;
         head.ready = false;
         head.inst = nullptr;
+
         rob_head_ = (rob_head_ + 1) % static_cast<int>(params_.rob_size);
         --rob_count_;
-        ++retired_this_cycle;
+        ++retired;
     }
 }
 
 void Simulator::writeback_stage() {
+    // Write results and mark ROB entries ready.
     for (Instruction *inst : wb_) {
         inst->stages[WB].duration++;
         rob_[inst->rob_index].ready = true;
 
         if (!inst->rt_started) {
             inst->rt_started = true;
-            start_stage(inst, RT, cycle_ + 1);
+            start_stage(inst, RT, cycle_ + 1);  // RT begins next cycle.
         }
     }
+
     wb_.clear();
 }
+
 
 void Simulator::execute_stage() {
     broadcast_tags_.clear();

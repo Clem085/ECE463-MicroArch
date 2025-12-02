@@ -25,9 +25,9 @@
 | val_trace_gcc1 | 8 | 16 | 32 | 64 |
 | val_trace_perl1 | 8 | 16 | 64 | 128 |
 
-### Discussion (Draft)
-- As WIDTH increases, IQ must grow to expose enough independent instructions; beyond the optimized sizes above, IPC gains flatten.
-- Perl needs larger IQs at W=4 and W=8 (64/128) than GCC (32/64), hinting denser dependencies or more long-latency ops in the Perl trace.
+### Discussion
+- As WIDTH increases, we observe that a **larger** IQ is needed; the IQ needs to look **farther** in the dynamic instruction stream to find **more** independent instructions that can issue in parallel each cycle. This matches the data: IQ opt grows from 8→16→32→64 as WIDTH goes 1→8 on gcc, and even larger (8→16→64→128) on perl.
+- For WIDTH=8, perl’s optimized IQ_SIZE is **greater than** gcc’s (128 vs 64). Likely explanation: **c** (**both** (a) more data dependencies requiring a farther lookahead and (b) more long-latency instructions), consistent with the trace needing a wider IQ to keep issue slots full.
 
 ## B. Effect of ROB_SIZE (using optimized IQ per WIDTH)
 
@@ -38,20 +38,9 @@
   ![experiments/graphs/rob_sweep_val_trace_gcc1.png](experiments/graphs/rob_sweep_val_trace_gcc1.png)
   ![experiments/graphs/rob_sweep_val_trace_perl1.png](experiments/graphs/rob_sweep_val_trace_perl1.png)
 
-### Discussion (Draft)
+### Discussion
 - IPC scales with ROB until instruction window captures enough parallelism; beyond that point returns flatten.
 - Wider widths rely more on large ROBs to find ready work; narrow widths benefit less.
-
-## How to Regenerate
-1. `./tests/run_tests.sh` (quick correctness sanity).
-2. `./experiments/run_experiments.sh`
-3. `./experiments/parse_results.py`
-4. `./experiments/plot_graphs.py`
-5. `./experiments/fill_report_table.py` (table already filled above; rerun if simulator changes).
-
-## Notes
-- All scripts assume traces at `proj3-traces/val_trace_gcc1` and `proj3-traces/val_trace_perl1`.
-- Graphs and tables should be updated after rerunning experiments on the final simulator build.
 
 ## Run Log (latest)
 - Unit tests: `./tests/run_tests.sh` → all PASS (trace_chain / trace_parallel / trace_mix).
@@ -67,3 +56,14 @@
   |-----------|----|----|----|----|
   | val_trace_gcc1 | 8 | 16 | 32 | 64 |
   | val_trace_perl1 | 8 | 16 | 64 | 128 |
+
+## How to Regenerate
+1. `./tests/run_tests.sh` (quick correctness sanity).
+2. `./experiments/run_experiments.sh`
+3. `./experiments/parse_results.py`
+4. `./experiments/plot_graphs.py`
+5. `./experiments/fill_report_table.py` (table already filled above; rerun if simulator changes).
+
+## Notes
+- All scripts assume traces at `proj3-traces/val_trace_gcc1` and `proj3-traces/val_trace_perl1`.
+- Graphs and tables should be updated after rerunning experiments on the final simulator build.
