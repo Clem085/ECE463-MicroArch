@@ -1,0 +1,14 @@
+0 fu{0} src{-1,-1} dst{1} FE{0,1} DE{1,1} RN{2,1} RR{3,1} DI{4,1} IS{5,1} EX{6,1} WB{7,1} RT{8,1}
+1 fu{0} src{1,-1} dst{2} FE{0,1} DE{1,1} RN{2,1} RR{3,1} DI{4,1} IS{5,2} EX{7,1} WB{8,1} RT{9,1}
+2 fu{0} src{2,-1} dst{3} FE{1,1} DE{2,1} RN{3,1} RR{4,1} DI{5,1} IS{6,2} EX{8,1} WB{9,1} RT{10,1}
+3 fu{0} src{3,-1} dst{4} FE{1,1} DE{2,1} RN{3,1} RR{4,1} DI{5,1} IS{6,3} EX{9,1} WB{10,1} RT{11,1}
+# === Simulator Command =========
+# ./sim 8 4 2 tests/trace_chain.txt
+# === Processor Configuration ===
+# ROB_SIZE = 8
+# IQ_SIZE  = 4
+# WIDTH    = 2
+# === Simulation Results ========
+# Dynamic Instruction Count    = 4
+# Cycles                       = 12
+# Instructions Per Cycle (IPC) = 0.33
